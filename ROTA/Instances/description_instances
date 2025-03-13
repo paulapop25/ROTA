@@ -1,0 +1,22 @@
+Structure des instances
+
+Les instances sont au format json. Ils sont nommés instance-<D>-<A>-<U>.json où :
+
+    -<D> est le nombre de destinations,
+    -<A> est le nombre d'avions,
+    -<U> est le niveau d'utilisation minimum de chaque avion.
+
+Chaque instance a la structure suivante :
+
+    - Le champ n_destinations est le nombre de destinations (le même que <D> ci-dessus).
+    - Le champ n_aircraft est le nombre d'avions (le même que <A> ci-dessus).
+    - Le champ time_horizon_len est le nombre d'instants de temps dans l'horizon temporel.
+    - Le champ min_utilisationiton est le niveau d'utilisation minimum par avion (identique à <U> ci-dessus).
+    - Le champ min_spacing est le temps de remplissage minimum entre deux vols vers la même destination.
+    - Le champ  slots est un tableau avec des entrées time_horizon_len. Chaque entrée correspond au nombre de créneaux disponibles sur le hub pendant l'intervalle de temps correspondant.
+    - Le champ destinations est un tableau avec une entrée pour chacune des n_destinations destinations. Chaque destination comporte des champs :
+        - n_flights, le nombre maximum de vols vers cette destination.
+        - Flight_time, le nombre d'instants de temps pour un aller-retour complet vers cette destination. Ce temps comprend le temps d'exécution à la fois à la destination et au hub.
+        - profit, un tableau avec une entrée pour chacun des instants time_horizon_len. Chaque entrée donne l'utilité d'effectuer un vol vers la destination donnée à un instant donné.
+
+
