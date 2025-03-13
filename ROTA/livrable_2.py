@@ -18,6 +18,11 @@ data = {
 }
 
 delta= 3
+T_max= data["time_horizon_len"]
+m= data["n_aircraft"]
+alpha= data["min_utilisation"]
+T= range(T_max)
+
 
 # Création des vols
 avion = Vol(data)
@@ -33,6 +38,7 @@ def dest(j):
     return avion.flights[j-1]["destination"]
 
 print(dest(8))
+
 
 # Création du problème
 prob = LpProblem("Problème de tournées", LpMaximize)
@@ -72,9 +78,8 @@ prob += lpSum([x[(k, j, t)] * avion.flights[j-1]["profit"][t]
 # Contraintes
 # somme sur t somme sur j tq dest(j)=i somme sur k x[k,j,t] <= n_flights[i]
 
-for j in liste_vols:
-    prob += lpSum([x[(k, j, t)] for k in range(data["n_aircraft"]) for t in range(data["time_horizon_len"])]) <= avion.flights[j-1]["n_flights"]
-
+for i in range(data["n_destinations"]):
+    prob += lpSum([x[(k, j, t)] for j in liste_vols if dest(j) == i for k in range(data["n_aircraft"]) for t in range(data["time_horizon_len"])]) <= data["destinations"][i]["n_flights"]
 
 
 
@@ -86,8 +91,33 @@ for t in range(data["time_horizon_len"]):
 # somme sur k (x[k,j,t] + somme sur t<= u< t + delta  x[k,j,u]) <= 1
 for j in liste_vols:
     for t in range(data["time_horizon_len"]):
-        prob += lpSum(x[k, j, t] for k in range (data["nb_aircaft"])  + lpSum(x[k, j, u] for k in range (data["nb_aircaft"]) for u in range(t + 1, min(t + delta, T_max))) <= 1
+        prob += lpSum(x[k, j, t] for k in range (m) for u in range(t + 1, min(t + delta, T_max))) <= 1
 
 
 
 # Contrainte : Utilisation minimale des avions
+for k in range(m):
+    #on récupère la destination du vol j:
+    prob += lpSum(x[k, j, t]* data["destinations"][dest(j)-1]["flight_time"] for j in liste_vols for t in T) >= alpha * T_max
+# Contrainte : Espacement minimal entre deux vols
+for j in liste_vols:
+    for k in range(m):
+        for t in T:
+            prob += x[k, j, t] + lpSum(x[k, j2, t2] for j2 in liste_vols for t2 in range(t + 1, min(t + delta, T_max))) <= 1
+
+# Résolution
+prob.solve()
+
+# Affichage des résultats
+print("Status:", LpStatus[prob.status])
+print("Profit total:", value(prob.objective))
+for j in liste_vols:
+    for k in range(m):
+        for t in T:
+            if x[k, j, t].varValue == 1:
+                print(f"Avion {k+1} : Vol {j} à l'instant {t}")
+                break
+print("Temps de départ des vols:")
+
+
+
