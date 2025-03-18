@@ -1,0 +1,195 @@
+import json
+import math
+from pulp import *
+
+# Charger les données depuis un fichier JSON
+def charger_donnees(fichier):
+    with open(fichier, 'r') as f:
+        return json.load(f)
+
+# Charger les données à partir du fichier data.json
+fichier_charge = "C:/Users/alici/Documents/Alicia/IENAC_2A/ROTA/Instances/instance-10-3-0.85.json"
+data = charger_donnees(fichier_charge)
+
+# Création des vols à partir des données
+class Vol:
+    def __init__(self, data):
+        self.data = data
+        self.flights = []
+        self.creation_vols()
+
+    def creation_vols(self):
+        av = 0
+        for i in range(self.data["n_destinations"]):
+            for j in range(self.data["destinations"][i]["n_flights"]):
+                av += 1
+                self.flights.append({
+                    "destination": i + 1,
+                    "vol": av,
+                    "profit": self.data["destinations"][i]["profit"]
+                })
+
+# Création des vols
+avion = Vol(data)
+liste_vols = [vol["vol"] for vol in avion.flights]
+
+def dest(j):
+    return avion.flights[j-1]["destination"]
+
+# Création du problème d'optimisation
+prob = LpProblem("Problème d'optimisation", LpMaximize)
+m = data["n_aircraft"]
+T_max = data["time_horizon_len"]
+delta = data["min_spacing"]
+alpha = data["min_utilisation"]
+T = range(T_max)
+T1 = list(range(data["time_horizon_len"]))
+liste_vols = [vol["vol"] for vol in avion.flights]
+
+
+# Création du problème
+prob = LpProblem("Problème d'optimisation", LpMaximize)
+
+x = LpVariable.dicts("x", 
+                     [(k, j, t) for k in range(m) 
+                     for j in liste_vols 
+                     for t in range(T_max)], 
+                     cat="Binary")
+
+# Objectif
+prob += lpSum([avion.flights[j-1]["profit"][t] * x[(k, j, t)] for k in range(m) for j in liste_vols for t in T]), "Profit"
+
+# Contraintes
+
+# Respect du nombre maximal de vols par destination
+for i in range(data["n_destinations"]):
+    prob += lpSum([x[(k, j, t_val)] for j in liste_vols if dest(j) == i for k in range(data["n_aircraft"]) for t_val in range(data["time_horizon_len"])]) <= data["destinations"][i]["n_flights"]
+
+# Respect des créneaux disponibles
+for t_val in T1:
+    prob += lpSum([x[(k, j, t_val)] for j in liste_vols for k in range(data["n_aircraft"])]) <= data["slots"][t_val]
+
+
+
+# Temps d’attente entre deux vols successifs vers la même destination (peu importe l'avion)
+"""
+for i in range(data["n_destinations"]):
+    for j1 in liste_vols:
+        for j2 in liste_vols:
+            if j1 != j2 and dest(j1) == dest(j2):  # Même destination
+                for t in T1:
+                    if t + delta < T_max:
+                        prob += (
+                            lpSum(x[(k, j1, t)] for k in range(m)) +
+                            lpSum(x[(k2, j2, t_prime)] for k2 in range(m) for t_prime in range(t, min(t + delta, T_max)))
+                        ) <= 1
+""" 
+#le pb est qu'il prend le dernier vol mais sur le même avion
+"""
+for i in range(data["n_destinations"]):
+    for t in T1:
+        prob += lpSum([x[(k, j, u)] for j in liste_vols if dest(j) == i+1 for k in range(m) for u in range(t, min(t + delta -1 , T_max))]) <= 1
+"""
+
+
+"""
+for i in range(data["n_destinations"]):  # Pour chaque destination
+    for t in range(T_max - delta):  # On regarde chaque instant où un vol peut commencer
+        prob += (
+            lpSum(x[(k, j, t)] for j in liste_vols if dest(j) == i+1 for k in range(m)) +
+            lpSum(x[(k2, j2, t_prime)] for j2 in liste_vols if dest(j2) == i+1 
+                  for k2 in range(m) for t_prime in range(t+1, min(t + delta, T_max)))
+        ) <= 1
+"""
+##avec ça on obtient 20 mais plausible
+
+for i in range(data["n_destinations"]):  # Pour chaque destination
+    for t in range(T_max - delta):  # Pour chaque instant où un vol peut commencer
+        prob += (
+            lpSum(x[(k, j, t)] for j in liste_vols if dest(j) == i+1 for k in range(m)) +
+            lpSum(x[(k2, j2, t_prime)] for j2 in liste_vols if dest(j2) == i+1 
+                  for k2 in range(m) for t_prime in range(t+1, min(t + delta, T_max)))
+        ) <= 1
+#Avec ça on obtient bien 17 mais le dernier trajet de l'avion 1 et 0 est inversé
+
+
+# Empêcher les vols vers la même destination d'être trop proches
+# Un même avion ne peut pas effectuer deux vols vers la même destination à moins de δ unités de temps
+for k in range(m):  # Pour chaque avion
+    for i in range(data["n_destinations"]):  # Pour chaque destination
+        for j1 in liste_vols:
+            for j2 in liste_vols:
+                if j1 != j2 and dest(j1) == dest(j2):  # Même destination
+                    for t in range(T_max - delta):
+                        prob += (
+                            x[(k, j1, t)] +
+                            lpSum(x[(k, j2, t_prime)] for t_prime in range(t+1, min(t + delta, T_max)))
+                        ) <= 1
+
+
+
+
+
+# Un avion ne peut pas faire deux vols en même temps
+for k in range(m):
+    for t_val in T1:
+        prob += lpSum([x[(k, j, u)] for j in liste_vols for u in range(max(0, t_val - data["destinations"][dest(j)-1]["flight_time"] + 1), t_val+1)]) <= 1
+
+# Un avion ne peut pas effectuer de vols après la fin de l’horizon
+#for k in range(m):
+#    for j in liste_vols:
+#        prob += lpSum([x[(k, j, u)] for u in range(T_max - data["destinations"][dest(j)-1]["flight_time"], T_max)]) == 0
+
+
+# Chaque avion doit être utilisé un minimum de temps
+for k in range(m):
+    prob += lpSum([data["destinations"][dest(j)-1]["flight_time"] * x[(k, j, t)] for j in liste_vols for t in T]) >= alpha * T_max
+
+#un vol est attribué une fois
+for j in liste_vols:
+    prob += lpSum(x[(k, j, t)] for k in range(m) for t in T1) <= 1
+
+
+# Un avion ne peut pas effectuer de vols après la fin de l’horizon
+for k in range(m):
+    for j in liste_vols:
+        prob += lpSum([x[(k, j, u)] for u in range((T_max - data["destinations"][dest(j)-1]["flight_time"])+1, T_max)]) == 0
+
+
+# Résolution
+prob.solve()
+
+# Affichage des résultats
+if prob.status == 1:
+    print(f"\nSolution optimale trouvée : Profit total = {value(prob.objective)}")
+    for k in range(m):
+        for j in liste_vols:
+            for t in T:
+                if x[(k, j, t)].value() == 1:
+                    print(f"Avion {k} effectue le vol {j} de l'instant {t} à l'instant {t + data['destinations'][dest(j)-1]['flight_time']} à la destination {dest(j)}")
+
+else:
+    print("\nAucune solution optimale trouvée.")
+
+
+import os
+
+def sauvegarder_resultats(fichier, solution):
+    # Vérifier si le dossier existe, sinon le créer
+    dossier = os.path.dirname(fichier)
+    if not os.path.exists(dossier):
+        os.makedirs(dossier)
+
+    # Sauvegarder les résultats dans le fichier
+    with open(fichier, 'w') as f:
+        for k in range(m):  # Pour chaque avion
+            for j in liste_vols:  # Pour chaque vol
+                for t in range(T_max):  # Pour chaque instant de temps
+                    # Vérifier si la variable de décision est égale à 1 (vol effectué)
+                    if x[(k, j, t)].value() == 1:
+                        # Sauvegarder l'avion, le vol, la destination, et le temps de début du vol
+                        f.write(f"{k} {j-1} {dest(j)-1} {t}\n")
+
+# Sauvegarde des résultats
+fichier_solution = "C:/Users/alici/Documents/Alicia/IENAC_2A/ROTA/Solution/solution-10-3-0.85.txt"
+sauvegarder_resultats(fichier_solution, prob)
