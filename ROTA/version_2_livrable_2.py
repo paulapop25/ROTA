@@ -27,6 +27,7 @@ T= range(T_max)
 # Création des vols
 avion = Vol(data)
 avion.creation_vols()
+print(avion.flights[1]["début du vol"])
 
 # Stocker les vols dans une liste
 liste_vols = [vol["vol"] for vol in avion.flights]
@@ -56,42 +57,42 @@ x = LpVariable.dicts("x",
                      for t in range(T_max)], 
                      cat="Binary")
 
-
+print(liste_vols)
 
 #t_j = début du vol j
-t = LpVariable.dicts("t", liste_vols, 0, T_max, cat="Integer")
+#t = LpVariable.dicts("t", [avion.flights[j-1]["début du vol"] for j in liste_vols], cat="Integer")
+t= LpVariable.dicts("t", liste_vols, cat="Integer")
+print(t)
 
-
-                     
 # Objectif
-prob += lpSum([x[(k, j, t)] * avion.flights[j-1]["profit"][t] 
+prob += lpSum([x[(k, j, t_val)] * avion.flights[j-1]["profit"][t_val] 
                for j in liste_vols 
                for k in range(data["n_aircraft"]) 
-               for t in range(data["time_horizon_len"])])
+               for t_val in range(data["time_horizon_len"])])
 
 
 # Contraintes
 # somme sur t somme sur j tq dest(j)=i somme sur k x[k,j,t] <= n_flights[i]
 
 for i in range(data["n_destinations"]):
-    prob += lpSum([x[(k, j, t)] for j in liste_vols if dest(j) == i+1 for k in range(data["n_aircraft"]) for t in range(data["time_horizon_len"])]) <= data["destinations"][i]["n_flights"]
+    prob += lpSum([x[(k, j, t_val)] for j in liste_vols if dest(j) == i+1 for k in range(data["n_aircraft"]) for t_val in range(data["time_horizon_len"])]) <= data["destinations"][i]["n_flights"]
 
 
 # Contrainte : somme sur k somme sur t x[k,j,t] <= 1
 for k in range(m):
-    for t in T:
-        prob += lpSum(x[k, j, t] for j in liste_vols) <= 1
+    for t_val in T:
+        prob += lpSum(x[k, j, t_val] for j in liste_vols) <= 1
 
 # somme sur j et somme sur k x[k,j,t] <= slots[t]
-for t in range(data["time_horizon_len"]):
-    prob += lpSum([x[(k, j, t)] for j in liste_vols for k in range(data["n_aircraft"])]) <= data["slots"][t]
+for t_val in range(data["time_horizon_len"]):
+    prob += lpSum([x[(k, j, t_val)] for j in liste_vols for k in range(data["n_aircraft"])]) <= data["slots"][t_val]
 
 #pour tout j tel que destination(j) = destination fixée, et t :  somme 
 # somme sur k (x[k,j,t] + somme sur t<= u< t + delta  x[k,j,u]) <= 1
 for j in liste_vols:
     for k in range(m):
-        for t in range(T_max):
-            prob += lpSum(x[k, j, t]) + lpSum(x[k, j, u] for u in range(t + 1, min(t + delta, T_max))) <= 1
+        for t_val in range(T_max):
+            prob += lpSum(x[k, j, t_val]) + lpSum(x[k, j, u] for u in range(t_val + 1, min(t_val + delta, T_max))) <= 1
 
 """
 for j in liste_vols:
@@ -113,8 +114,9 @@ time_range = range(T_max)
 # Contrainte d'affectation de t_j
 for j in liste_vols:
     for k in range(m):
-        t[j] = avion.flights[j-1]["début du vol"]
-        prob += t[j] == lpSum(t * x[k, j, t] for t in time_range)
+        print(j)
+        #t[j] = avion.flights[j-1]["début du vol"]
+        prob += t[j] == lpSum(t_val * x[k, j, t_val] for t_val in time_range), f"Contrainte d'affectation de t_j pour le vol {j} et l'avion {k}"
         
 #pb: TypeError: 'int' object is not subscriptable
 
@@ -123,26 +125,26 @@ for j in liste_vols:
 # Contrainte : Utilisation minimale des avions
 for k in range(m):
     #on récupère la destination du vol j:
-    prob += lpSum(x[k, j, t]* data["destinations"][dest(j)-1]["flight_time"] for j in liste_vols for t in T) >= alpha * T_max
+    prob += lpSum(x[k, j, t_val]* data["destinations"][dest(j)-1]["flight_time"] for j in liste_vols for t_val in T) >= alpha * T_max
 
 # Contrainte : Espacement minimal entre deux vols
 for j in liste_vols:
     for k in range(m):
-        for t in T:
-            prob += x[k, j, t] + lpSum(x[k, j2, t2] for j2 in liste_vols for t2 in range(t + 1, min(t + delta, T_max))) <= 1
+        for t_val in T:
+            prob += x[k, j, t_val] + lpSum(x[k, j2, t2] for j2 in liste_vols for t2 in range(t_val + 1, min(t_val + delta, T_max))) <= 1
 
 #deux vols de la même destination ne sont pas trop proches
 for j in liste_vols:
     for j2 in liste_vols:
         if j != j2 and dest(j) == dest(j2):  # Même destination
             for k in range(m):
-                for t in T:  
-                    prob += x[k, j, t] + lpSum(x[k, j2, t2] for t2 in range(t + 1, min(t + delta, T_max))) <= 1
+                for t_val in T:  
+                    prob += x[k, j, t_val] + lpSum(x[k, j2, t2] for t2 in range(t_val + 1, min(t_val + delta, T_max))) <= 1
 
 
 # Contrainte : Temps de vol,  tous les vols terminent avant la fin, t_j + flight_time(j) <= T_max
-#for j in liste_vols:
-#    prob += t[j] + data["destinations"][dest(j)-1]["flight_time"] <= T_max
+for j in liste_vols:
+    prob += t[j] + data["destinations"][dest(j)-1]["flight_time"] <= T_max
 
 
 
