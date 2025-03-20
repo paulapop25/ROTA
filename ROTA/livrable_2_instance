@@ -160,7 +160,8 @@ for j in liste_vols:
 #for k in range(m):
 #    prob+= lpSum([x[(k, j, t)] for j in liste_vols for t in range(T_max - data["destinations"][dest(j)-1]["flight_time"], T_max)]) == 0
 
-prob += lpSum([x[(k, j, t)] for k in range(m) for j in liste_vols for t in range(T_max - data["destinations"][dest(j)-1]["flight_time"], T_max)]) == 0
+prob += lpSum([x[(k, j, t)] for k in range(m) for j in liste_vols for t in range(T_max - data["destinations"][dest(j)-1]["flight_time"]+1, T_max)]) == 0
+
 
 
 # Résolution
