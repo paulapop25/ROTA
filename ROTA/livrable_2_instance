@@ -62,8 +62,8 @@ prob += lpSum([avion.flights[j-1]["profit"][t] * x[(k, j, t)] for k in range(m) 
 # Contraintes
 
 # Respect du nombre maximal de vols par destination
-for i in range(data["n_destinations"]):
-    prob += lpSum([x[(k, j, t_val)] for j in liste_vols if dest(j) == i for k in range(data["n_aircraft"]) for t_val in range(data["time_horizon_len"])]) <= data["destinations"][i]["n_flights"]
+#for i in range(data["n_destinations"]):
+#    prob += lpSum([x[(k, j, t_val)] for j in liste_vols if dest(j) == i for k in range(data["n_aircraft"]) for t_val in range(data["time_horizon_len"])]) <= data["destinations"][i]["n_flights"]
 
 # Respect des créneaux disponibles
 for t_val in T1:
@@ -102,7 +102,7 @@ for i in range(data["n_destinations"]):  # Pour chaque destination
         ) <= 1
 """
 ##avec ça on obtient 20 mais plausible
-
+"""
 for i in range(data["n_destinations"]):  # Pour chaque destination
     for t in range(T_max - delta):  # Pour chaque instant où un vol peut commencer
         prob += (
@@ -111,10 +111,19 @@ for i in range(data["n_destinations"]):  # Pour chaque destination
                   for k2 in range(m) for t_prime in range(t+1, min(t + delta, T_max)))
         ) <= 1
 #Avec ça on obtient bien 17 mais le dernier trajet de l'avion 1 et 0 est inversé
+"""
 
+for i in range(data["n_destinations"]):  # Pour chaque destination
+    for t in range(T_max - delta):  # Pour chaque instant où un vol peut commencer
+        prob += (
+            lpSum(x[(k, j, t_prime)] for j in liste_vols if dest(j) == i+1 
+                  for k in range(m) for t_prime in range(t, min(t + delta, T_max)))
+        ) <= 1
+ 
 
 # Empêcher les vols vers la même destination d'être trop proches
 # Un même avion ne peut pas effectuer deux vols vers la même destination à moins de δ unités de temps
+"""
 for k in range(m):  # Pour chaque avion
     for i in range(data["n_destinations"]):  # Pour chaque destination
         for j1 in liste_vols:
@@ -125,15 +134,12 @@ for k in range(m):  # Pour chaque avion
                             x[(k, j1, t)] +
                             lpSum(x[(k, j2, t_prime)] for t_prime in range(t+1, min(t + delta, T_max)))
                         ) <= 1
-
-
-
-
-
-# Un avion ne peut pas faire deux vols en même temps
-for k in range(m):
+"""
+for k in range(m):  # Pour chaque avion
     for t_val in T1:
         prob += lpSum([x[(k, j, u)] for j in liste_vols for u in range(max(0, t_val - data["destinations"][dest(j)-1]["flight_time"] + 1), t_val+1)]) <= 1
+
+
 
 # Un avion ne peut pas effectuer de vols après la fin de l’horizon
 #for k in range(m):
