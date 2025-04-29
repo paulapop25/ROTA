@@ -1,0 +1,105 @@
+import json
+import sys
+import os
+from pulp import *
+
+def charger_donnees(fichier):
+    with open(fichier, 'r') as f:
+        return json.load(f)
+
+class Vol:
+    def __init__(self, data):
+        self.data = data
+        self.flights = []
+        self.creation_vols()
+    
+    def creation_vols(self):
+        av = 0
+        for i in range(self.data["n_destinations"]):
+            for j in range(self.data["destinations"][i]["n_flights"]):
+                av += 1
+                self.flights.append({
+                    "destination": i + 1,
+                    "vol": av,
+                    "profit": self.data["destinations"][i]["profit"]
+                })
+
+def dest(j, avion):
+    return avion.flights[j-1]["destination"]
+
+def solve(instance_file, time_limit, plot=False):
+    data = charger_donnees(instance_file)
+    avion = Vol(data)
+    liste_vols = [vol["vol"] for vol in avion.flights]
+
+    prob = LpProblem("Problème d'optimisation", LpMaximize)
+    m = data["n_aircraft"]
+    T_max = data["time_horizon_len"]
+    delta = data["min_spacing"]
+    alpha = data["min_utilisation"]
+    T = range(T_max)
+    T1 = list(range(data["time_horizon_len"]))
+    
+    x = LpVariable.dicts("x", [(k, j, t) for k in range(m) for j in liste_vols for t in range(T_max)], cat="Binary")
+    
+    prob += lpSum([avion.flights[j-1]["profit"][t] * x[(k, j, t)] for k in range(m) for j in liste_vols for t in T]), "Profit"
+    
+    for t_val in T1:
+        prob += lpSum([x[(k, j, t_val)] for j in liste_vols for k in range(m)]) <= data["slots"][t_val]
+    
+    for i in range(data["n_destinations"]):
+        for t in range(T_max - delta):
+            prob += lpSum(x[(k, j, t_prime)] for j in liste_vols if dest(j, avion) == i+1 for k in range(m) for t_prime in range(t, min(t + delta, T_max))) <= 1
+    
+    for k in range(m):
+        for t_val in T1:
+            prob += lpSum([x[(k, j, u)] for j in liste_vols for u in range(max(0, t_val - data["destinations"][dest(j, avion)-1]["flight_time"] + 1), t_val+1)]) <= 1
+    
+    for k in range(m):
+        prob += lpSum([data["destinations"][dest(j, avion)-1]["flight_time"] * x[(k, j, t)] for j in liste_vols for t in T]) >= alpha * T_max
+    
+    for j in liste_vols:
+        prob += lpSum(x[(k, j, t)] for k in range(m) for t in T1) <= 1
+    
+    prob += lpSum([x[(k, j, t)] for k in range(m) for j in liste_vols for t in range(T_max - data["destinations"][dest(j, avion)-1]["flight_time"]+1, T_max)]) == 0
+    
+    prob.solve(PULP_CBC_CMD(timeLimit=time_limit))
+    
+    if prob.status == 1:
+        print(f"\nSolution optimale trouvée : Profit total = {value(prob.objective)}")
+        solution = []
+        for k in range(m):
+            for j in liste_vols:
+                for t in T:
+                    if x[(k, j, t)].value() == 1:
+                        solution.append(f"{k} {dest(j, avion)-1} {t}\n")
+                        print(f"Avion {k} effectue un vol vers la destination {dest(j, avion)-1} de l'instant {t} à l'instant {t + data['destinations'][dest(j, avion)-1]['flight_time']}")
+        
+        return solution
+    else:
+        print("Aucune solution trouvée")
+        return None
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: python main.py <instance_file> <time_limit> [--plot]")
+        sys.exit(1)
+    
+    instance_file = sys.argv[1]
+    time_limit = int(sys.argv[2])
+    plot = "--plot" in sys.argv
+    
+    solution = solve(instance_file, time_limit, plot)
+
+    
+    if solution:
+        output_dir = "Solution"
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        solution_file = instance_file.replace("Instances", "Solution").replace("instance", "solution").replace(".json", ".txt")
+        with open(solution_file, "w") as f:
+            #on écrit l'avion, la destination, le temps de départ
+            f.writelines(solution)
+        print(f"\nSolution sauvegardée dans {solution_file}")
+        
