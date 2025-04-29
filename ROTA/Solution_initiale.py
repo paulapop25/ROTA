@@ -55,6 +55,41 @@ def planifier_vols(vols):
     return solution, profit_total, planning
 
 
+
+def recuit_simule(solution, donnees, T_max, lambda_espacement, lambda_utilisation, vols):
+    # Initialisation
+    m = donnees["n_aircraft"]
+    planning = [[0] * T_max for _ in range(m)]  # Matrice de disponibilité des avions
+    slots_disponibles = donnees["slots"][:]
+    profit_total = 0
+
+    # Création de la liste des vols triés par profit décroissant
+    vols_tries = sorted(vols, key=lambda v: v["profit"], reverse=True)
+
+    # Parcours des vols triés par profit décroissant
+    for vol_info in vols_tries:
+        vol = vol_info["vol"]
+        t = vol_info["time"]
+        duree = vol_info["flight_time"]
+        profits = vol_info["profit"]
+
+        # Recherche d'un créneau disponible
+        if t + duree <= T_max and slots_disponibles[t] > 0:
+            for k in range(m):
+                # Vérification des créneaux libres pour l'avion k
+                if all(planning[k][t + dt] == 0 for dt in range(duree)):
+                    # Affectation du vol à l'avion k à l'instant t
+                    for dt in range(duree):
+                        planning[k][t + dt] = 1  # Marquer les créneaux comme occupés
+                    slots_disponibles[t] -= 1
+                    profit_total += profits
+                    solution.append((k, vol, t))  # Ajouter le numéro du vol
+                    break
+
+    return solution, profit_total, planning
+
+
+
 # Lecture des données depuis le fichier JSON
 
     
